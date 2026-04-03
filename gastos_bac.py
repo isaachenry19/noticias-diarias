@@ -26,13 +26,14 @@ def get_body(msg):
         body = msg.get_payload(decode=True).decode("utf-8", errors="ignore")
     return body
 
-def leer_emails_bac(dias_atras=1):
+def leer_emails_bac(fecha_desde, fecha_hasta):
     mail = imaplib.IMAP4_SSL("imap.gmail.com")
     mail.login(GMAIL_USER, GMAIL_PASS)
     mail.select("inbox")
 
-    fecha_limite = (datetime.now() - timedelta(days=dias_atras)).strftime("%d-%b-%Y")
-    _, mensajes = mail.search(None, f'FROM "notificacion_pa@pa.bac.net" SINCE {fecha_limite}')
+    # Traemos emails de los ultimos 35 dias para asegurarnos
+    fecha_busqueda = (datetime.now() - timedelta(days=35)).strftime("%d-%b-%Y")
+    _, mensajes = mail.search(None, f'FROM "notificacion_pa@pa.bac.net" SINCE {fecha_busqueda}')
 
     gastos = []
     for num in mensajes[0].split():
@@ -42,15 +43,19 @@ def leer_emails_bac(dias_atras=1):
 
         comercio_match = re.search(r'Comercio\s*\n?\s*(.+?)(?:\s+USD|\s+\$|\n)', body, re.IGNORECASE)
         monto_match = re.search(r'USD\s*([\d,]+\.?\d*)', body, re.IGNORECASE)
-        fecha_match = re.search(r'(\d{4}/\d{2}/\d{2})', body)
+        fecha_match = re.search(r'(\d{4}/\d{2}/\d{2})-\d{2}:\d{2}:\d{2}', body)
 
-        if monto_match:
-            fecha_str = fecha_match.group(1) if fecha_match else ""
-            gastos.append({
-                "monto": float(monto_match.group(1).replace(",", "")),
-                "comercio": comercio_match.group(1).strip() if comercio_match else "Desconocido",
-                "fecha": fecha_str
-            })
+        if monto_match and fecha_match:
+            fecha_str = fecha_match.group(1)
+            fecha_tx = datetime.strptime(fecha_str, "%Y/%m/%d")
+
+            # Filtrar por rango de fechas exacto
+            if fecha_desde <= fecha_tx <= fecha_hasta:
+                gastos.append({
+                    "monto": float(monto_match.group(1).replace(",", "")),
+                    "comercio": comercio_match.group(1).strip() if comercio_match else "Desconocido",
+                    "fecha": fecha_str
+                })
 
     mail.logout()
     return gastos
@@ -58,11 +63,12 @@ def leer_emails_bac(dias_atras=1):
 hoy = datetime.now()
 ayer = hoy - timedelta(days=1)
 es_fin_de_mes = hoy.day == 1
-meses_es_nombre = meses_es[ayer.month - 1]
 
 if es_fin_de_mes:
-    # Resumen mensual completo
-    gastos = leer_emails_bac(dias_atras=31)
+    # Resumen mensual — todo el mes anterior
+    primer_dia_mes = datetime(ayer.year, ayer.month, 1, 0, 0, 0)
+    ultimo_dia_mes = datetime(ayer.year, ayer.month, ayer.day, 23, 59, 59)
+    gastos = leer_emails_bac(primer_dia_mes, ultimo_dia_mes)
     mes_nombre = meses_es[ayer.month - 1].capitalize()
     titulo = f"Cierre de mes BAC - {mes_nombre} {ayer.year}"
 
@@ -86,26 +92,29 @@ if es_fin_de_mes:
         medallas = ["🥇", "🥈", "🥉"]
         for i, (comercio, monto) in enumerate(top3):
             lineas.append(f"{medallas[i]} {comercio}: ${monto:,.2f}")
-
         mensaje = "\n".join(lineas)
 
 else:
-    # Gastos de ayer
-    gastos_ayer = leer_emails_bac(dias_atras=1)
-    
-    # Gastos del mes hasta hoy
-    dias_del_mes = hoy.day
-    gastos_mes = leer_emails_bac(dias_atras=dias_del_mes)
+    # Gastos de ayer — solo transacciones del dia de ayer
+    inicio_ayer = datetime(ayer.year, ayer.month, ayer.day, 0, 0, 0)
+    fin_ayer = datetime(ayer.year, ayer.month, ayer.day, 23, 59, 59)
+    gastos_ayer = leer_emails_bac(inicio_ayer, fin_ayer)
+
+    # Acumulado del mes — desde el dia 1 hasta hoy
+    inicio_mes = datetime(hoy.year, hoy.month, 1, 0, 0, 0)
+    fin_hoy = datetime(hoy.year, hoy.month, hoy.day, 23, 59, 59)
+    gastos_mes = leer_emails_bac(inicio_mes, fin_hoy)
+
     total_mes = sum(g["monto"] for g in gastos_mes)
     mes_actual = meses_es[hoy.month - 1].capitalize()
-
+    meses_es_nombre = meses_es[ayer.month - 1]
     titulo = f"Gastos BAC - ayer {ayer.day} de {meses_es_nombre}"
 
     if not gastos_ayer:
         lineas = [
             f"📭 Sin transacciones ayer {ayer.day} de {meses_es_nombre}",
             f"",
-            f"📊 Lo que llevas gastado en {mes_actual}:",
+            f"📊 Como vas en {mes_actual}:",
             f"💳 Acumulado {mes_actual}: ${total_mes:,.2f}",
             f"🧾 Transacciones del mes: {len(gastos_mes)}",
         ]
@@ -120,7 +129,7 @@ else:
             f"💳 Ayer {ayer.day} de {meses_es_nombre}",
             f"",
             f"💰 Gastado ayer: ${total_ayer:,.2f}",
-            f"🧾 Transacciones: {len(gastos_ayer)}",
+            f"🧾 Transacciones ayer: {len(gastos_ayer)}",
             f"",
             f"🏆 Top 3 de ayer:",
         ]
