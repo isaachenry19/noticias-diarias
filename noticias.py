@@ -1,21 +1,31 @@
 import requests
 import os
+import feedparser
+from datetime import datetime
 
 topic = os.environ.get("NTFY_TOPIC", "noticias-isaac")
 
-mensaje = """NOTICIAS DEL DIA
+# Detectar que notificacion mandar segun la hora
+hora = datetime.utcnow().hour
 
-1. La inteligencia artificial sigue transformando el mundo tech
-2. Nuevos avances en energia renovable
-3. Mercados globales al dia
+if hora == 14:  # 9am Panama = 14 UTC
+    # NOTICIAS GLOBALES
+    feed = feedparser.parse("http://feeds.bbci.co.uk/news/world/rss.xml")
+    titulo_notif = "Isaac! Aqui tienes las noticias globales del dia"
+    noticias = feed.entries[:3]
+else:
+    # NOTICIAS PANAMA
+    feed = feedparser.parse("https://www.laestrella.com.pa/feed")
+    titulo_notif = "Isaac! Lo que esta pasando en Panama ahora"
+    noticias = feed.entries[:3]
 
-Tip del dia: Aprender Python es una de las mejores inversiones que puedes hacer"""
+mensaje = "\n\n".join([f"- {n.title}" for n in noticias])
 
 requests.post(
     f"https://ntfy.sh/{topic}",
     data=mensaje.encode("utf-8"),
     headers={
-        "Title": "Noticias del Dia",
+        "Title": titulo_notif,
         "Priority": "default",
         "Tags": "newspaper"
     }
