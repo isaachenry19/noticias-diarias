@@ -10,6 +10,7 @@ on:
 jobs:
   enviar-noticia:
     runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' || github.event.schedule == '0 14 * * *' || github.event.schedule == '0 15 * * *'
     steps:
       - uses: actions/checkout@v3
       - name: Setup Python
@@ -25,6 +26,7 @@ jobs:
 
   resumen-gastos:
     runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' || github.event.schedule == '0 13 * * *'
     steps:
       - uses: actions/checkout@v3
       - name: Setup Python
