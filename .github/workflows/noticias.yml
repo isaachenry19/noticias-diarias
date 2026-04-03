@@ -1,1 +1,22 @@
+name: Noticias Diarias
 
+on:
+  schedule:
+    - cron: '0 12 * * *'
+  workflow_dispatch:
+
+jobs:
+  enviar-noticia:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+      - name: Instalar dependencias
+        run: pip install requests
+      - name: Correr script
+        run: python noticias.py
+        env:
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
