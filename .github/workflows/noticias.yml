@@ -5,7 +5,7 @@ on:
   schedule:
     - cron: '0 14 * * *'
     - cron: '0 15 * * *'
-    - cron: '0 13 * * 0'
+    - cron: '0 13 * * *'
 
 jobs:
   enviar-noticia:
@@ -23,7 +23,7 @@ jobs:
         env:
           NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
 
-  gastos-bac:
+  resumen-gastos:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
