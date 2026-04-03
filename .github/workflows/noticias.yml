@@ -3,7 +3,8 @@ name: Noticias Diarias
 on:
   workflow_dispatch:
   schedule:
-    - cron: '0 12 * * *'
+    - cron: '0 14 * * *'
+    - cron: '0 15 * * *'
 
 jobs:
   enviar-noticia:
@@ -15,7 +16,7 @@ jobs:
         with:
           python-version: '3.11'
       - name: Instalar dependencias
-        run: pip install requests
+        run: pip install requests feedparser
       - name: Correr script
         run: python noticias.py
         env:
