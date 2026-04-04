@@ -16,10 +16,11 @@ def get_body(msg):
     body = ""
     if msg.is_multipart():
         for part in msg.walk():
-            if part.get_content_type() in ["text/plain", "text/html"]:
+            if part.get_content_type() == "text/plain":
                 try:
                     body = part.get_payload(decode=True).decode("utf-8", errors="ignore")
-                    break
+                    if body.strip():
+                        return body
                 except:
                     continue
     else:
@@ -31,7 +32,6 @@ def leer_emails_bac(fecha_desde, fecha_hasta):
     mail.login(GMAIL_USER, GMAIL_PASS)
     mail.select("inbox")
 
-    # Traemos emails de los ultimos 35 dias para asegurarnos
     fecha_busqueda = (datetime.now() - timedelta(days=35)).strftime("%d-%b-%Y")
     _, mensajes = mail.search(None, f'FROM "notificacion_pa@pa.bac.net" SINCE {fecha_busqueda}')
 
@@ -41,15 +41,20 @@ def leer_emails_bac(fecha_desde, fecha_hasta):
         msg = email.message_from_bytes(data[0][1])
         body = get_body(msg)
 
-        comercio_match = re.search(r'Comercio\s*\n?\s*(.+?)(?:\s+USD|\s+\$|\n)', body, re.IGNORECASE)
+        # Comercio viene 2 lineas despues del label "Comercio":
+        # Comercio\nMonto\nPedidosYa*Athanasiou B\nUSD 14.95
+        comercio_match = re.search(r'Comercio\s*\n\s*Monto\s*\n\s*(.+?)\s*\n', body, re.IGNORECASE)
+
+        # Monto: USD 14.95
         monto_match = re.search(r'USD\s*([\d,]+\.?\d*)', body, re.IGNORECASE)
+
+        # Fecha: 2026/04/03-18:10:23
         fecha_match = re.search(r'(\d{4}/\d{2}/\d{2})-\d{2}:\d{2}:\d{2}', body)
 
         if monto_match and fecha_match:
             fecha_str = fecha_match.group(1)
             fecha_tx = datetime.strptime(fecha_str, "%Y/%m/%d")
 
-            # Filtrar por rango de fechas exacto
             if fecha_desde <= fecha_tx <= fecha_hasta:
                 gastos.append({
                     "monto": float(monto_match.group(1).replace(",", "")),
@@ -65,7 +70,6 @@ ayer = hoy - timedelta(days=1)
 es_fin_de_mes = hoy.day == 1
 
 if es_fin_de_mes:
-    # Resumen mensual — todo el mes anterior
     primer_dia_mes = datetime(ayer.year, ayer.month, 1, 0, 0, 0)
     ultimo_dia_mes = datetime(ayer.year, ayer.month, ayer.day, 23, 59, 59)
     gastos = leer_emails_bac(primer_dia_mes, ultimo_dia_mes)
@@ -95,12 +99,10 @@ if es_fin_de_mes:
         mensaje = "\n".join(lineas)
 
 else:
-    # Gastos de ayer — solo transacciones del dia de ayer
     inicio_ayer = datetime(ayer.year, ayer.month, ayer.day, 0, 0, 0)
     fin_ayer = datetime(ayer.year, ayer.month, ayer.day, 23, 59, 59)
     gastos_ayer = leer_emails_bac(inicio_ayer, fin_ayer)
 
-    # Acumulado del mes — desde el dia 1 hasta hoy
     inicio_mes = datetime(hoy.year, hoy.month, 1, 0, 0, 0)
     fin_hoy = datetime(hoy.year, hoy.month, hoy.day, 23, 59, 59)
     gastos_mes = leer_emails_bac(inicio_mes, fin_hoy)
@@ -125,11 +127,15 @@ else:
             comercios[g["comercio"]] += g["monto"]
         top3 = sorted(comercios.items(), key=lambda x: x[1], reverse=True)[:3]
 
+        # Transaccion individual mas alta del dia
+        tx_mas_alta = max(gastos_ayer, key=lambda x: x["monto"])
+
         lineas = [
             f"💳 Ayer {ayer.day} de {meses_es_nombre}",
             f"",
             f"💰 Gastado ayer: ${total_ayer:,.2f}",
             f"🧾 Transacciones ayer: {len(gastos_ayer)}",
+            f"⬆️ Mayor transacción: {tx_mas_alta['comercio']} ${tx_mas_alta['monto']:,.2f}",
             f"",
             f"🏆 Top 3 de ayer:",
         ]
